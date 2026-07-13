@@ -1,6 +1,6 @@
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
-import { FruteriaProvider } from './state/FruteriaProvider';
+import { FruteriaProvider } from './stores/FruteriaProvider';
 
 function App() {
   return (

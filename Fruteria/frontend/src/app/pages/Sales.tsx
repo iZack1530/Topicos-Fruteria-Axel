@@ -20,7 +20,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { CATEGORIES } from '../services/catalog';
-import { useFruteria } from '../state/FruteriaProvider';
+import { useFruteria } from '../stores/FruteriaProvider';
 import type { PaymentMethod, SaleCartItem } from '../types/fruteria';
 
 type CatalogStep = 'catalog' | 'checkout' | 'success';

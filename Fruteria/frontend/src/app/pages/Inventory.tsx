@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { CATEGORIES, getProductStatus } from '../services/catalog';
-import { useFruteria } from '../state/FruteriaProvider';
+import { useFruteria } from '../stores/FruteriaProvider';
 
 export const Inventory = () => {
   const navigate = useNavigate();
