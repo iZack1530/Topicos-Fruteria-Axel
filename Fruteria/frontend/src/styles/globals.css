@@ -1,0 +1,9 @@
+/* Ocultar todas las barras de desplazamiento sin afectar la funcionalidad */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
