@@ -1,3 +1,7 @@
+/* ============================================================
+   GLOBALS — Frutería Axel
+   ============================================================ */
+
 /* Ocultar todas las barras de desplazamiento sin afectar la funcionalidad */
 * {
   scrollbar-width: none;
@@ -6,4 +10,33 @@
 
 *::-webkit-scrollbar {
   display: none;
+}
+
+/* ── Fuente global: Plus Jakarta Sans ── */
+html,
+body {
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Base font 17px para mayor comodidad de lectura en adultos mayores */
+  font-size: 17px;
+}
+
+/* ── Asegurar que los botones hereden la fuente ── */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* ── Transición suave en todos los elementos interactivos ── */
+button {
+  cursor: pointer;
+}
+
+/* ── Selección de texto con colores del tema ── */
+::selection {
+  background-color: #6ee7b7; /* emerald-200 */
+  color: #065f46;             /* emerald-900 */
 }

@@ -4,12 +4,16 @@ import {
   PackageMinus,
   Tag,
   Calculator,
+  Scale,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router';
+import { useFruteria } from '../stores/FruteriaProvider';
 
 export const Admin = () => {
   const navigate = useNavigate();
+  const { tickets } = useFruteria();
+  const currentSalesTotal = tickets.reduce((acc, t) => acc + t.total, 0);
 
   return (
     <div className="flex flex-col h-full bg-[#F8F9FE]">
@@ -52,7 +56,7 @@ export const Admin = () => {
 
           <p className="text-xs text-gray-400 mb-1">Saldo de Caja Actual</p>
           <h2 className="text-4xl font-black text-[#1A1C1E] tracking-tight mb-1">
-            $4,250.00
+            ${currentSalesTotal.toFixed(2)}
           </h2>
           <p className="text-sm font-bold text-gray-400">MXN</p>
         </motion.div>
@@ -87,6 +91,14 @@ export const Admin = () => {
                 path: '/inventory'
               },
               {
+                title: 'Asignación',
+                sub: 'de Pesos',
+                icon: Scale,
+                iconBg: 'bg-purple-50',
+                iconColor: 'text-purple-600',
+                path: '/weight-register'
+              },
+              {
                 title: 'Control',
                 sub: 'de Caja',
                 icon: Calculator,
@@ -96,7 +108,7 @@ export const Admin = () => {
               },
             ].map((action, i) => (
               <motion.button
-                key={action.title}
+                key={action.path}
                 initial={{ opacity: 0, scale: 0.93 }}
                 animate={{ opacity: 1, scale: 1 }}
                 onClick={() => navigate(action.path)}

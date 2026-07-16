@@ -42,8 +42,10 @@ export const CashCut = () => {
   );
   const [processing, setProcessing] = useState(false);
 
-  // Sum up all tickets sold to compute the actual session sales
-  const sessionSales = tickets.reduce((acc, ticket) => acc + ticket.total, 0);
+  // Only cash sales affect the physical money in the register.
+  // Card and transfer payments don't add cash to the drawer.
+  const cashTickets = tickets.filter(ticket => ticket.method === 'Efectivo');
+  const sessionSales = cashTickets.reduce((acc, ticket) => acc + ticket.total, 0);
   const saldoTotal = sessionSales + FONDO_CAMBIO;
 
   /* Suma física contada */
@@ -116,10 +118,10 @@ export const CashCut = () => {
             className="bg-[#001540] rounded-[24px] p-5 text-white relative overflow-hidden"
           >
             <div className="absolute right-0 top-0 w-28 h-28 bg-white/5 rounded-full -mr-10 -mt-10" />
-            <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Saldo del Sistema</p>
+            <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Saldo Esperado en Caja</p>
             <h2 className="text-4xl font-black mb-1">${saldoTotal.toFixed(2)}</h2>
             <div className="flex gap-4 text-white/60 text-xs mt-2">
-              <span>Ventas: <strong className="text-white">${sessionSales.toFixed(2)}</strong></span>
+              <span>Ventas efectivo: <strong className="text-white">${sessionSales.toFixed(2)}</strong></span>
               <span>Fondo: <strong className="text-white">${FONDO_CAMBIO.toFixed(2)}</strong></span>
             </div>
           </motion.div>
@@ -236,7 +238,8 @@ export const CashCut = () => {
             <h2 className="text-base font-bold text-[#1A1C1E]">Resumen del Corte</h2>
 
             {[
-              { label: 'Saldo del sistema',  value: `$${saldoTotal.toFixed(2)}`,    bold: false },
+              { label: 'Ventas en efectivo',  value: `$${sessionSales.toFixed(2)}`,    bold: false },
+              { label: 'Saldo esperado en caja', value: `$${saldoTotal.toFixed(2)}`,    bold: false },
               { label: 'Total contado',       value: `$${physicalTotal.toFixed(2)}`,  bold: false },
               { label: 'Fondo de cambio',     value: `$${FONDO_CAMBIO.toFixed(2)}`,   bold: false },
             ].map(row => (

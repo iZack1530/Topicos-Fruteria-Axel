@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useFruteria } from '../stores/FruteriaProvider';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 interface PriceEntry {
   id: number;
@@ -116,7 +117,7 @@ export const WeightRegister = () => {
       {/* Header */}
       <div className="bg-[#001540] text-white px-4 py-5 flex items-center gap-3 shrink-0">
         <button
-          onClick={() => navigate('/sales')}
+          onClick={() => navigate(-1)}
           className="p-1.5 hover:bg-white/10 rounded-full transition-colors active:scale-95"
         >
           <ArrowLeft className="w-6 h-6" />
@@ -165,7 +166,7 @@ export const WeightRegister = () => {
                 }`}
               >
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-50 shrink-0">
-                  <img src={entry.image} alt={entry.name} className="w-full h-full object-cover" />
+                  <ImageWithFallback src={entry.image} alt={entry.name} className="w-full h-full object-cover" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -240,7 +241,7 @@ export const WeightRegister = () => {
               {/* Producto */}
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-50 shrink-0">
-                  <img src={selected.image} alt={selected.name} className="w-full h-full object-cover" />
+                  <ImageWithFallback src={selected.image} alt={selected.name} className="w-full h-full object-cover" />
                 </div>
                 <div>
                   <h3 className="font-bold text-[#1A1C1E]">{selected.name}</h3>

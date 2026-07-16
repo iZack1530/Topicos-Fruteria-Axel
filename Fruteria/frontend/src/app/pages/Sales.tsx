@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { CATEGORIES } from '../services/catalog';
 import { useFruteria } from '../stores/FruteriaProvider';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import type { PaymentMethod, SaleCartItem, Product } from '../types/fruteria';
 
 type CatalogStep = 'catalog' | 'checkout' | 'success';
@@ -244,7 +245,7 @@ function CatalogView({ onBack }: { onBack: () => void }) {
                   className={`flex items-center gap-3 px-4 py-3.5 ${i !== arr.length - 1 ? 'border-b border-gray-50' : ''}`}
                 >
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-50 shrink-0">
-                    <img src={p.image as string} alt={p.name} className="w-full h-full object-cover" />
+                    <ImageWithFallback src={p.image} alt={p.name} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-[#1A1C1E] truncate">{p.name}</p>
@@ -456,7 +457,7 @@ function CatalogView({ onBack }: { onBack: () => void }) {
                 }`}
               >
                 <div className="h-32 w-full relative overflow-hidden bg-gray-50">
-                  <img src={product.image as string} alt={product.name} className="w-full h-full object-cover" />
+                  <ImageWithFallback src={product.image} alt={product.name} className="w-full h-full object-cover" />
                   {/* Badge categoría */}
                   <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-[#002B7F]">
                     {product.category}
