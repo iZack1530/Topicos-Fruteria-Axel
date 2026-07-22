@@ -2,11 +2,13 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { INITIAL_PRODUCTS, INITIAL_TICKETS } from '../services/catalog';
 import { readJsonStorage, writeJsonStorage } from '../utils/storage';
 import type { PaymentMethod, Product, SaleCartItem, TicketSummary } from '../types/fruteria';
-import { supabase } from '../services/supabase';
+import { isSupabaseConfigured, supabase } from '../services/supabase';
+import { toast } from 'sonner';
 
 type FruteriaContextValue = {
   products: Product[];
   tickets: TicketSummary[];
+  isSyncing: boolean;
   registerSale: (items: SaleCartItem[], paymentMethod: PaymentMethod) => void;
   addProduct: (product: Omit<Product, 'id'>) => void;
   deleteProduct: (id: number) => void;
@@ -28,6 +30,13 @@ function paymentLabel(paymentMethod: PaymentMethod) {
   return 'Transferencia';
 }
 
+/** Surfaces a Supabase/Postgrest error consistently in the console and as a toast. */
+function reportSyncError(action: string, error: unknown) {
+  console.error(`[Supabase] ${action} failed:`, error);
+  const message = error instanceof Error ? error.message : 'Error desconocido';
+  toast.error(`No se pudo sincronizar con la base de datos (${action}). ${message}`);
+}
+
 export function FruteriaProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>(() =>
     readJsonStorage(STORAGE_KEYS.products, INITIAL_PRODUCTS)
@@ -35,8 +44,12 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
   const [tickets, setTickets] = useState<TicketSummary[]>(() =>
     readJsonStorage(STORAGE_KEYS.tickets, INITIAL_TICKETS)
   );
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Sync to local storage as safety fallback
+  // Local storage stays as an offline-friendly mirror of the last known
+  // state (either from Supabase, or from a previous local session if
+  // Supabase is unreachable). It is never the source of truth once Supabase
+  // is configured and reachable.
   useEffect(() => {
     writeJsonStorage(STORAGE_KEYS.products, products);
   }, [products]);
@@ -45,9 +58,21 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
     writeJsonStorage(STORAGE_KEYS.tickets, tickets);
   }, [tickets]);
 
-  // Load initial data from Supabase on mount
+  // Load initial data from Supabase on mount. Supabase is the source of
+  // truth whenever it can be reached: a successful (even empty) response
+  // replaces local/mock data. We only fall back to whatever was already in
+  // local storage or the bundled demo data when Supabase itself can't be
+  // reached (missing config, network error, or a Postgrest error), so an
+  // intentionally emptied table doesn't get "resurrected" by stale mock data.
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    let cancelled = false;
+
     async function loadFromSupabase() {
+      setIsSyncing(true);
       try {
         const { data: dbProducts, error: pError } = await supabase
           .from('products')
@@ -55,38 +80,53 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
           .order('id', { ascending: true });
 
         if (pError) throw pError;
-        if (dbProducts && dbProducts.length > 0) {
-          setProducts(dbProducts);
+        if (!cancelled && dbProducts) {
+          setProducts(dbProducts as Product[]);
         }
       } catch (err) {
-        console.warn('Could not load products from Supabase, using local fallback:', err);
+        reportSyncError('carga de productos', err);
       }
 
       try {
         const { data: dbTickets, error: tError } = await supabase
           .from('tickets')
           .select('*')
-          .order('id', { ascending: false });
+          .order('ticket_id', { ascending: false });
 
         if (tError) throw tError;
-        if (dbTickets && dbTickets.length > 0) {
-          setTickets(dbTickets);
+        if (!cancelled && dbTickets) {
+          // Map Supabase column 'ticket_id' to local 'id'
+          const mapped = (dbTickets as Array<Record<string, unknown>>).map(t => ({
+            id: t.ticket_id as string,
+            ago: t.ago as string,
+            items: t.items as number,
+            total: t.total as number,
+            method: t.method as string,
+          }));
+          setTickets(mapped);
         }
       } catch (err) {
-        console.warn('Could not load tickets from Supabase, using local fallback:', err);
+        reportSyncError('carga de tickets', err);
+      } finally {
+        if (!cancelled) setIsSyncing(false);
       }
     }
-    
-    // Only fetch if Supabase client is properly configured
-    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-      loadFromSupabase();
-    }
+
+    loadFromSupabase();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const registerSale = async (items: SaleCartItem[], paymentMethod: PaymentMethod) => {
     if (items.length === 0) {
       return;
     }
+
+    // Snapshot so we can roll back precisely if the database write fails.
+    const previousProducts = products;
+    const previousTickets = tickets;
 
     const saleTotal = items.reduce((accumulator, item) => {
       const product = products.find(current => current.id === item.id);
@@ -106,22 +146,6 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
-    setProducts(updatedProducts);
-
-    // Sync stock updates to Supabase
-    for (const item of items) {
-      const prod = updatedProducts.find(p => p.id === item.id);
-      if (prod) {
-        supabase
-          .from('products')
-          .update({ stock: prod.stock })
-          .eq('id', prod.id)
-          .then(({ error }) => {
-            if (error) console.error('Error updating stock in Supabase:', error);
-          });
-      }
-    }
-
     const nextTicketNumber = tickets.length > 0
       ? Number(tickets[0].id.replace('#', '')) + 1
       : 4522;
@@ -134,15 +158,48 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
       method: paymentLabel(paymentMethod),
     };
 
+    // Optimistic update: the cashier sees the sale reflected instantly.
+    setProducts(updatedProducts);
     setTickets(currentTickets => [newTicket, ...currentTickets]);
 
-    // Insert ticket into Supabase
-    supabase
-      .from('tickets')
-      .insert([newTicket])
-      .then(({ error }) => {
-        if (error) console.error('Error inserting ticket to Supabase:', error);
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    try {
+      // Persist the stock decrement for every affected product. Any one of
+      // these failing throws and triggers a full rollback below, so we never
+      // end up with the sale reflected on screen but only partially saved.
+      const stockUpdates = items.map(item => {
+        const prod = updatedProducts.find(p => p.id === item.id);
+        if (!prod) return Promise.resolve();
+        return supabase
+          .from('products')
+          .update({ stock: prod.stock })
+          .eq('id', prod.id)
+          .then(({ error }) => {
+            if (error) throw error;
+          });
       });
+
+      await Promise.all(stockUpdates);
+
+      // Map local 'id' to Supabase column 'ticket_id'
+      const dbTicket = {
+        ticket_id: newTicket.id,
+        ago: newTicket.ago,
+        items: newTicket.items,
+        total: newTicket.total,
+        method: newTicket.method,
+      };
+      const { error: ticketError } = await supabase.from('tickets').insert([dbTicket]);
+      if (ticketError) throw ticketError;
+    } catch (err) {
+      reportSyncError('registro de venta', err);
+      // Roll back so the on-screen state matches what's actually in the database.
+      setProducts(previousProducts);
+      setTickets(previousTickets);
+    }
   };
 
   const addProduct = async (product: Omit<Product, 'id'>) => {
@@ -154,77 +211,120 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
 
     setProducts(currentProducts => [...currentProducts, newProduct]);
 
-    // Insert into Supabase
-    supabase
-      .from('products')
-      .insert([newProduct])
-      .then(({ error }) => {
-        if (error) console.error('Error inserting product to Supabase:', error);
-      });
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('products').insert([newProduct]);
+      if (error) throw error;
+    } catch (err) {
+      reportSyncError('alta de producto', err);
+      setProducts(currentProducts => currentProducts.filter(p => p.id !== newProduct.id));
+    }
   };
 
   const deleteProduct = async (id: number) => {
+    const removedProduct = products.find(p => p.id === id);
+
     setProducts(currentProducts => currentProducts.filter(p => p.id !== id));
 
-    // Delete from Supabase
-    supabase
-      .from('products')
-      .delete()
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Error deleting product from Supabase:', error);
-      });
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      reportSyncError('baja de producto', err);
+      if (removedProduct) {
+        setProducts(currentProducts =>
+          currentProducts.some(p => p.id === id) ? currentProducts : [...currentProducts, removedProduct]
+        );
+      }
+    }
   };
 
   const updateProductPrice = async (id: number, price: number) => {
+    const previousPrice = products.find(p => p.id === id)?.price;
+
     setProducts(currentProducts =>
       currentProducts.map(p => (p.id === id ? { ...p, price } : p))
     );
 
-    // Update in Supabase
-    supabase
-      .from('products')
-      .update({ price })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Error updating price in Supabase:', error);
-      });
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('products').update({ price }).eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      reportSyncError('actualización de precio', err);
+      if (previousPrice !== undefined) {
+        setProducts(currentProducts =>
+          currentProducts.map(p => (p.id === id ? { ...p, price: previousPrice } : p))
+        );
+      }
+    }
   };
 
   const updateProductStock = async (id: number, stock: number) => {
+    const previousStock = products.find(p => p.id === id)?.stock;
+
     setProducts(currentProducts =>
       currentProducts.map(p => (p.id === id ? { ...p, stock } : p))
     );
 
-    // Update in Supabase
-    supabase
-      .from('products')
-      .update({ stock })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Error updating stock in Supabase:', error);
-      });
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('products').update({ stock }).eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      reportSyncError('actualización de existencias', err);
+      if (previousStock !== undefined) {
+        setProducts(currentProducts =>
+          currentProducts.map(p => (p.id === id ? { ...p, stock: previousStock } : p))
+        );
+      }
+    }
   };
 
   const updateProductDates = async (id: number, entryDate: string, expiryDate: string) => {
+    const previous = products.find(p => p.id === id);
+
     setProducts(currentProducts =>
       currentProducts.map(p => (p.id === id ? { ...p, entryDate, expiryDate } : p))
     );
 
-    // Update in Supabase
-    supabase
-      .from('products')
-      .update({ entryDate, expiryDate })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Error updating dates in Supabase:', error);
-      });
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('products').update({ entryDate, expiryDate }).eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      reportSyncError('actualización de fechas', err);
+      if (previous) {
+        setProducts(currentProducts =>
+          currentProducts.map(p =>
+            p.id === id ? { ...p, entryDate: previous.entryDate, expiryDate: previous.expiryDate } : p
+          )
+        );
+      }
+    }
   };
 
   const value = useMemo(
     () => ({
       products,
       tickets,
+      isSyncing,
       registerSale,
       addProduct,
       deleteProduct,
@@ -232,7 +332,7 @@ export function FruteriaProvider({ children }: { children: React.ReactNode }) {
       updateProductStock,
       updateProductDates,
     }),
-    [products, tickets]
+    [products, tickets, isSyncing]
   );
 
   return <FruteriaContext.Provider value={value}>{children}</FruteriaContext.Provider>;
