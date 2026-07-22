@@ -12,13 +12,17 @@ if (!isSupabaseConfigured) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // This app has no login/session flow, so we don't need Supabase Auth's
-    // client-side session persistence or the background token-refresh calls
-    // it schedules by default. Keeping this off avoids unused localStorage
-    // entries and network activity for a store that only uses the anon key.
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
+export const supabase = createClient(
+  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
+  isSupabaseConfigured ? supabaseAnonKey : 'placeholder-anon-key',
+  {
+    auth: {
+      // This app has no login/session flow, so we don't need Supabase Auth's
+      // client-side session persistence or the background token-refresh calls
+      // it schedules by default. Keeping this off avoids unused localStorage
+      // entries and network activity for a store that only uses the anon key.
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  }
+);
